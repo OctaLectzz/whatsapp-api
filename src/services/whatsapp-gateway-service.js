@@ -38,11 +38,14 @@ export class WhatsappGatewayService {
     this.logger = logger
     this.socket = null
     this.isConnecting = false
+    this.isResettingPendingConnection = false
     this.reconnectTimer = null
     this.state = { ...DEFAULT_STATUS }
   }
 
   getStatus() {
+    this.clearExpiredAuthPrompts()
+
     return {
       status: this.state.connectionStatus,
       message: this.state.statusMessage,
@@ -77,6 +80,7 @@ export class WhatsappGatewayService {
       throw error
     }
 
+    await this.resetPendingConnection()
     await this.connect({ mode: 'pairing_code', phoneNumber: normalizedPhoneNumber })
 
     return this.getStatus()
@@ -185,7 +189,16 @@ export class WhatsappGatewayService {
       })
 
       if (mode === 'pairing_code' && phoneNumber && !state.creds.registered) {
-        this.state.pairingCode = await this.socket.requestPairingCode(phoneNumber)
+        await this.socket.waitForSocketOpen()
+
+        this.state.pairingCode = await this.socket.requestPairingCode(phoneNumber).catch((error) => {
+          this.logger.warn({ error, phoneNumber }, 'WhatsApp pairing code request failed')
+
+          const pairingError = new Error('Pairing code could not be generated. Please try again in a few moments.')
+          pairingError.status = 502
+          pairingError.cause = error
+          throw pairingError
+        })
         this.state.pairingCodeExpiresAt = secondsFromNow(this.config.whatsapp.pairingTtlSeconds)
         await this.updateConnectionState({
           status: 'pairing_code_ready',
@@ -198,10 +211,31 @@ export class WhatsappGatewayService {
     }
   }
 
+  async resetPendingConnection() {
+    this.clearReconnectTimer()
+
+    if (this.socket && this.state.connectionStatus !== 'connected') {
+      this.isResettingPendingConnection = true
+      try {
+        await this.socket.end(undefined).catch((error) => {
+          this.logger.warn({ error }, 'Pending WhatsApp socket could not be closed')
+        })
+      } finally {
+        this.isResettingPendingConnection = false
+      }
+    }
+
+    if (this.state.connectionStatus !== 'connected') {
+      this.socket = null
+      await fs.rm(this.config.whatsapp.authDir, { recursive: true, force: true })
+      this.resetAuthPrompts()
+    }
+  }
+
   async handleConnectionUpdate(update) {
     const { connection, lastDisconnect, qr } = update
 
-    if (qr) {
+    if (qr && this.state.connectionMode !== 'pairing_code') {
       this.state.qrCode = qr
       this.state.qrCodeDataUrl = await QRCode.toDataURL(qr, { margin: 1, width: 320 })
       this.state.qrExpiresAt = secondsFromNow(this.config.whatsapp.qrTtlSeconds)
@@ -215,9 +249,11 @@ export class WhatsappGatewayService {
     }
 
     if (connection === 'connecting') {
+      const isPairingCodeReady = this.state.connectionMode === 'pairing_code' && this.state.pairingCode
+
       await this.updateConnectionState({
-        status: this.state.qrCode ? 'qr_ready' : 'connecting',
-        message: this.state.qrCode ? this.state.statusMessage : 'Connecting to WhatsApp.',
+        status: isPairingCodeReady ? 'pairing_code_ready' : this.state.qrCode ? 'qr_ready' : 'connecting',
+        message: isPairingCodeReady || this.state.qrCode ? this.state.statusMessage : 'Connecting to WhatsApp.',
         type: 'connecting'
       })
     }
@@ -241,6 +277,11 @@ export class WhatsappGatewayService {
   }
 
   async handleClosedConnection(lastDisconnect) {
+    if (this.isResettingPendingConnection) {
+      this.socket = null
+      return
+    }
+
     const error = lastDisconnect?.error
     const statusCode = error instanceof Boom ? error.output.statusCode : error?.output?.statusCode
     const shouldReconnect = statusCode !== DisconnectReason.loggedOut
@@ -294,7 +335,34 @@ export class WhatsappGatewayService {
     this.state.pairingCodeExpiresAt = null
   }
 
+  clearExpiredAuthPrompts() {
+    const now = Date.now()
+
+    if (this.state.qrExpiresAt && new Date(this.state.qrExpiresAt).getTime() <= now) {
+      this.state.qrCode = null
+      this.state.qrCodeDataUrl = null
+      this.state.qrExpiresAt = null
+    }
+
+    if (this.state.pairingCodeExpiresAt && new Date(this.state.pairingCodeExpiresAt).getTime() <= now) {
+      this.state.pairingCode = null
+      this.state.pairingCodeExpiresAt = null
+    }
+
+    if (this.state.connectionStatus === 'qr_ready' && !this.state.qrCode) {
+      this.state.connectionStatus = 'disconnected'
+      this.state.statusMessage = 'QR code expired. Please generate a new one.'
+    }
+
+    if (this.state.connectionStatus === 'pairing_code_ready' && !this.state.pairingCode) {
+      this.state.connectionStatus = 'disconnected'
+      this.state.statusMessage = 'Pairing code expired. Please generate a new one.'
+    }
+  }
+
   async updateConnectionState({ status, message, type }) {
+    this.clearExpiredAuthPrompts()
+
     this.state.connectionStatus = status
     this.state.statusMessage = message
 
