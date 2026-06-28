@@ -1,0 +1,24 @@
+﻿{
+  "name": "whatsapp-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/config/env.js && node --check src/config/logger.js && node --check src/http/app.js && node --check src/http/auth-middleware.js && node --check src/services/laravel-callback-client.js && node --check src/services/whatsapp-gateway-service.js && node --check src/utils/date.js && node --check src/utils/phone-number.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+
