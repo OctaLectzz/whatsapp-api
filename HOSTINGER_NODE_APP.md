@@ -4,7 +4,7 @@ Use these values in Hostinger **Websites -> Manage -> Advanced -> Node.js**.
 
 | Setting | Value |
 | --- | --- |
-| Node.js version | 20 or newer |
+| Node.js version | 24.x |
 | Application mode | Production |
 | Application root | uploaded `dist` folder path |
 | Application URL | subdomain or path assigned for WhatsApp gateway |
@@ -25,3 +25,4 @@ Do not set `WHATSAPP_GATEWAY_PORT` when Hostinger provides `PORT`. Set `WHATSAPP
 - Store tokens only in Hostinger environment variables and Laravel `.env`.
 - Keep `storage/auth` writable but never public.
 - Restart the Node.js app after changing env values.
+

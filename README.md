@@ -48,7 +48,7 @@ Use `.env.hostinger.example` and `HOSTINGER_NODE_APP.md` as the Hostinger config
 
 ## Hostinger Business Shared Hosting Deploy
 
-Use Hostinger's Node.js application feature. This service is not static hosting and must run as a Node.js app.
+Use Hostinger's Node.js application feature with Node.js 24.x. This service is not static hosting and must run as a Node.js app.
 
 1. Run `npm run build` locally or in CI.
 2. Upload the contents of `anggrek-astuti-whatsapp/dist` to the Node.js app root on Hostinger.
@@ -79,3 +79,4 @@ LARAVEL_API_URL=https://your-laravel-domain.com/api
 LARAVEL_WHATSAPP_GATEWAY_TOKEN=replace-with-random-64-char-secret
 LARAVEL_CALLBACK_TIMEOUT_MS=5000
 ```
+
