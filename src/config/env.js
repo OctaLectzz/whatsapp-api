@@ -1,15 +1,24 @@
 ﻿import path from 'node:path'
 
 function numberFromEnv(name, fallback) {
-  const value = Number(process.env[name] ?? fallback)
+  const rawValue = process.env[name]
+
+  if (rawValue === undefined || rawValue === '') {
+    return fallback
+  }
+
+  const value = Number(rawValue)
 
   return Number.isFinite(value) ? value : fallback
 }
 
 export const config = {
+  app: {
+    env: process.env.NODE_ENV ?? 'development'
+  },
   server: {
-    host: process.env.WHATSAPP_GATEWAY_HOST ?? '127.0.0.1',
-    port: numberFromEnv('WHATSAPP_GATEWAY_PORT', 3030),
+    host: process.env.WHATSAPP_GATEWAY_HOST ?? '0.0.0.0',
+    port: numberFromEnv('WHATSAPP_GATEWAY_PORT', numberFromEnv('PORT', 3030)),
     allowedOrigin: process.env.WHATSAPP_GATEWAY_ALLOWED_ORIGIN ?? '*',
     apiToken: process.env.WHATSAPP_GATEWAY_API_TOKEN
   },
@@ -26,5 +35,19 @@ export const config = {
   },
   logging: {
     level: process.env.WHATSAPP_GATEWAY_LOG_LEVEL ?? 'info'
+  }
+}
+
+const requiredProductionEnv = [
+  'WHATSAPP_GATEWAY_API_TOKEN',
+  'LARAVEL_API_URL',
+  'LARAVEL_WHATSAPP_GATEWAY_TOKEN'
+]
+
+if (config.app.env === 'production') {
+  const missingEnv = requiredProductionEnv.filter((name) => !process.env[name])
+
+  if (missingEnv.length > 0) {
+    throw new Error(`Missing required production environment variables: ${missingEnv.join(', ')}`)
   }
 }
